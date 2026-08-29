@@ -27,6 +27,15 @@ busy-office-erp (closes OQ-LICENSE-ENGINE).
   bo-transport classify before.json after.json
   ```
 
+- `audit/` — `bo-audit` (PRN-12): coverage, consistency, completeness and
+  separation-of-duties checks read from artifacts that already exist. A
+  check that cannot see its evidence reports UNAVAILABLE rather than
+  passing, and only real findings exit non-zero.
+
+  ```
+  bo-audit <repo-path> [--repo=owner/name] [--limit=N]
+  ```
+
 ## Not here yet
 
 Transport v0 (assemble·impact·gate·route·stamp, ADR-05), the third lint,

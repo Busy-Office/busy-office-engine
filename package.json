@@ -1,13 +1,14 @@
 {
   "name": "@busy-office/engine",
   "version": "0.0.0",
-  "description": "busy-office engine: skills, lints, transport, trust — pinned by every consumer repo",
+  "description": "busy-office engine: skills, lints, transport, trust \u2014 pinned by every consumer repo",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "bo-graph-lint": "./lints/graph-lint/index.mjs",
     "bo-trust-lint": "./lints/trust-lint/index.mjs",
-    "bo-transport": "./transport/cli.mjs"
+    "bo-transport": "./transport/cli.mjs",
+    "bo-audit": "./audit/bo-audit.mjs"
   },
   "scripts": {
     "test": "node --test \"**/*.test.mjs\""
