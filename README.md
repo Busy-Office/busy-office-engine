@@ -8,6 +8,10 @@ Decisions about this repo's own internals live in its own graph once a
 round-table runs here (ADR-11 boundary) — nothing in this repo is
 ratified yet; this is bootstrap scaffolding only.
 
+> **License is PROVISIONAL** — the Apache-2.0 text in `LICENSE` was
+> assumed during bootstrap, never ratified. See `LICENSE-STATUS.md` and
+> OQ-LICENSE-ENGINE in the erp graph.
+
 ## What's here so far
 
 - `lints/graph-lint/` — line-cap + unique-ID check for a DESIGN-GRAPH.md
