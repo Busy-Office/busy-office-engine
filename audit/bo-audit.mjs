@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // bo-audit (PRN-12, rules in erp ADR-30). The system audits itself from
 // artifacts it already has: the graph, the contracts, PR history. No audit
 // data model, no dashboard — those would be another component needing its
