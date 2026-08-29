@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "counter": 0,
+  "expires": "SET-AT-FIRST-SIGNING",
+  "artifacts": [],
+  "note": "unsigned fixture used only by this repo's own CI self-test",
+  "signature": null
+}
