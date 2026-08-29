@@ -2,7 +2,7 @@
   "name": "@busy-office/engine",
   "version": "0.0.0",
   "description": "busy-office engine: skills, lints, transport, trust — pinned by every consumer repo",
-  "license": "SEE LICENSE IN LICENSE-STATUS.md",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "bo-graph-lint": "./lints/graph-lint/index.mjs",
