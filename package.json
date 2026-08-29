@@ -6,7 +6,11 @@
   "type": "module",
   "bin": {
     "bo-graph-lint": "./lints/graph-lint/index.mjs",
-    "bo-trust-lint": "./lints/trust-lint/index.mjs"
+    "bo-trust-lint": "./lints/trust-lint/index.mjs",
+    "bo-transport": "./transport/cli.mjs"
+  },
+  "scripts": {
+    "test": "node --test \"**/*.test.mjs\""
   },
   "engines": {
     "node": ">=22"

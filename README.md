@@ -19,6 +19,14 @@ busy-office-erp (closes OQ-LICENSE-ENGINE).
   workflow SHA-pin check, generalized from busy-office-erp's
   `scripts/trust-lint.mjs`.
 
+- `transport/` — the delta classifier (ADR-05, rules in erp ADR-20) and
+  its CLI. Given two versions of a contract it answers hot / additive /
+  breaking, and exits 0 / 1 / 2 so a CI gate can act on it:
+
+  ```
+  bo-transport classify before.json after.json
+  ```
+
 ## Not here yet
 
 Transport v0 (assemble·impact·gate·route·stamp, ADR-05), the third lint,

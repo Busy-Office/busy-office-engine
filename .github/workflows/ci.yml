@@ -22,3 +22,5 @@ jobs:
         run: node lints/trust-lint/index.mjs --manifest=lints/trust-lint/fixtures/bo-manifest.sample.json --workflows=.github/workflows
       - name: Smoke-test graph-lint against a fixture
         run: node lints/graph-lint/index.mjs lints/graph-lint/fixtures/DESIGN-GRAPH.sample.md
+      - name: Unit tests
+        run: node --test "**/*.test.mjs"
