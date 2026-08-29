@@ -27,6 +27,10 @@ busy-office-erp (closes OQ-LICENSE-ENGINE).
   bo-transport classify before.json after.json
   ```
 
+- `lints/conflict-lint/` — `bo-conflict-lint`: fails on unresolved
+  `<<<<<<<` markers in any tracked file. It exists because their absence
+  let markers reach a default branch unnoticed.
+
 - `audit/` — `bo-audit` (PRN-12): coverage, consistency, completeness and
   separation-of-duties checks read from artifacts that already exist. A
   check that cannot see its evidence reports UNAVAILABLE rather than
