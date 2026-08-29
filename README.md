@@ -38,7 +38,7 @@ busy-office-erp (closes OQ-LICENSE-ENGINE).
 
 ## Not here yet
 
-Transport v0 (assemble·impact·gate·route·stamp, ADR-05), the third lint,
-remaining skills, and npm publishing/pinning — erp still vendors its own
-copies of graph-lint/trust-lint locally until transport can pin this repo
-by version (tracked in erp issue #1).
+The remaining transport verbs (assemble·impact·gate·route·stamp, ADR-05 —
+only the classifier has a consumer today), the third lint, remaining
+skills, and npm publishing. erp consumes this repo by exact commit SHA
+since S0.16; a version pin waits for npm.
