@@ -144,6 +144,35 @@ function checkSoD(slug, limit) {
     return;
   }
 
+  // A repo with no PRs at all must not score clean. The first version of
+  // this check only examined merged PRs, so a repo where everything was
+  // pushed straight to main had nothing to flag and reported "No findings"
+  // — the check rewarded bypassing the process entirely, which is a worse
+  // failure than the one it was built to catch. Found by running bo-audit
+  // against this repo (erp S0.24).
+  if (prs.length === 0) {
+    let directCommits = 0;
+    try {
+      directCommits = JSON.parse(
+        execSync(`gh api repos/${slug}/commits`, {
+          encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+        }),
+      ).length;
+    } catch { /* leave at 0 */ }
+
+    if (directCommits > 0) {
+      finding(
+        "sod",
+        "error",
+        `${slug} has ${directCommits} commit(s) and no pull requests at all — every change went straight to the default branch, so no review was even possible`,
+        slug,
+      );
+    } else {
+      finding("sod", "unavailable", `${slug} has no merged PRs and no commits to judge`, slug);
+    }
+    return;
+  }
+
   const unreviewed = prs.filter((p) => (p.reviews ?? []).length === 0);
   if (unreviewed.length > 0) {
     finding(
