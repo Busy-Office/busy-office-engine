@@ -31,6 +31,12 @@ busy-office-erp (closes OQ-LICENSE-ENGINE).
   `<<<<<<<` markers in any tracked file. It exists because their absence
   let markers reach a default branch unnoticed.
 
+- `lints/architecture-lint/` — `bo-architecture-lint`: fails when a
+  component exists that the architecture document names nowhere, or when a
+  ratified count no longer matches the set it describes. Does **not** fail on
+  declared-but-unbuilt components — in a phased project those are the plan
+  working.
+
 - `audit/` — `bo-audit` (PRN-12): coverage, consistency, completeness and
   separation-of-duties checks read from artifacts that already exist. A
   check that cannot see its evidence reports UNAVAILABLE rather than

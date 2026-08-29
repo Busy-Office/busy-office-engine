@@ -9,7 +9,8 @@
     "bo-trust-lint": "./lints/trust-lint/index.mjs",
     "bo-transport": "./transport/cli.mjs",
     "bo-audit": "./audit/bo-audit.mjs",
-    "bo-conflict-lint": "./lints/conflict-lint/index.mjs"
+    "bo-conflict-lint": "./lints/conflict-lint/index.mjs",
+    "bo-architecture-lint": "./lints/architecture-lint/index.mjs"
   },
   "scripts": {
     "test": "node --test \"**/*.test.mjs\""
