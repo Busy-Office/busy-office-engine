@@ -130,7 +130,20 @@ function checkCompleteness(repo, contracts) {
 // The check DA-12's "audit-ready by construction" claim rests on, and the
 // one Rex flagged as unbacked. It reads real PR history; if gh is
 // unavailable it reports UNAVAILABLE rather than passing.
-function checkSoD(slug, limit) {
+/**
+ * A ratified exception is reported, never suppressed. An exception nobody
+ * can see has not been managed, only hidden — and one that fails the build
+ * becomes a gate people route around (ADR-32).
+ */
+function ratifiedSoDException(graph) {
+  if (!graph) return null;
+  const row = graph.text.split("\n").find((l) => /^\|\s*DA-13\s*\|/.test(l));
+  if (!row) return null;
+  const reopen = row.split("|")[4]?.trim();
+  return { node: "DA-13", reopen: reopen ?? "(reopen trigger not stated)" };
+}
+
+function checkSoD(slug, limit, exception) {
   let prs;
   try {
     prs = JSON.parse(
@@ -144,11 +157,40 @@ function checkSoD(slug, limit) {
     return;
   }
 
+  // A repo with no PRs at all must not score clean. The first version of
+  // this check only examined merged PRs, so a repo where everything was
+  // pushed straight to main had nothing to flag and reported "No findings"
+  // — the check rewarded bypassing the process entirely, which is a worse
+  // failure than the one it was built to catch. Found by running bo-audit
+  // against this repo (erp S0.24).
+  if (prs.length === 0) {
+    let directCommits = 0;
+    try {
+      directCommits = JSON.parse(
+        execSync(`gh api repos/${slug}/commits`, {
+          encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+        }),
+      ).length;
+    } catch { /* leave at 0 */ }
+
+    if (directCommits > 0) {
+      finding(
+        "sod",
+        exception ? "accepted" : "error",
+        `${slug} has ${directCommits} commit(s) and no pull requests at all — every change went straight to the default branch, so no review was even possible`,
+        slug,
+      );
+    } else {
+      finding("sod", "unavailable", `${slug} has no merged PRs and no commits to judge`, slug);
+    }
+    return;
+  }
+
   const unreviewed = prs.filter((p) => (p.reviews ?? []).length === 0);
   if (unreviewed.length > 0) {
     finding(
       "sod",
-      "error",
+      exception ? "accepted" : "error",
       `${unreviewed.length} of ${prs.length} merged PRs had no review — AGENTS.md non-negotiable #1 is "no self-review, no self-merge, ever, any seat"`,
       unreviewed.map((p) => `#${p.number}`).join(" "),
     );
@@ -185,11 +227,13 @@ const contracts = readContracts(repo);
 checkCoverage(repo, graph);
 checkConsistency(repo, contracts);
 checkCompleteness(repo, contracts);
-if (slug) checkSoD(slug, limit);
+const sodException = ratifiedSoDException(graph);
+if (slug) checkSoD(slug, limit, sodException);
 else finding("sod", "unavailable", "no git remote — cannot read PR history", null);
 unavailableChecks();
 
 const errors = findings.filter((f) => f.severity === "error");
+const accepted = findings.filter((f) => f.severity === "accepted");
 const unavailable = findings.filter((f) => f.severity === "unavailable");
 
 console.log(`bo-audit — ${repo}\n`);
@@ -199,12 +243,21 @@ for (const f of errors) {
 }
 if (errors.length === 0) console.log("No findings.");
 
+if (accepted.length > 0) {
+  console.log("\nAccepted exceptions (ratified, still true, still counted):");
+  for (const f of accepted) {
+    console.log(`  [${f.check}] ${f.message}`);
+    if (f.evidence) console.log(`         evidence: ${f.evidence}`);
+    if (sodException) console.log(`         accepted by ${sodException.node} — reopens on: ${sodException.reopen}`);
+  }
+}
+
 if (unavailable.length > 0) {
   console.log("\nNot checked (evidence unavailable — not the same as passing):");
   for (const f of unavailable) console.log(`  [${f.check}] ${f.message}`);
 }
 
-console.log(`\n${errors.length} finding(s), ${unavailable.length} check(s) unavailable`);
+console.log(`\n${errors.length} finding(s), ${accepted.length} accepted exception(s), ${unavailable.length} check(s) unavailable`);
 
 // Exit 1 on findings so a gate can act, but only on real findings —
 // unavailable checks must not fail a build they cannot judge.
