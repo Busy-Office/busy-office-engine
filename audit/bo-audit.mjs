@@ -126,6 +126,73 @@ function checkCompleteness(repo, contracts) {
   }
 }
 
+// ---- check 4: coverage — declared things nothing exercises --------------
+// Adopted at the S0.28 round table. The proposal was an agent owner who
+// would review each package; what survived grilling was the mechanical
+// half — an operation nobody tests, a package nobody documents. Those are
+// checkable, and a check cannot be satisfied by the thing it checks.
+//
+// It reports what is DECLARED but unexercised, never guessing at what
+// should have been declared. A missing test for a real operation is a
+// fact; a missing operation is an opinion.
+function checkCoverage2(repo, contracts) {
+  // Every op contract should be named by at least one test.
+  const testFiles = [];
+  const scan = (dir) => {
+    if (!existsSync(dir)) return;
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name !== "node_modules" && !e.name.startsWith(".")) scan(full);
+      } else if (/\.test\.[a-z]+$/.test(e.name)) {
+        testFiles.push(readFileSync(full, "utf8"));
+      }
+    }
+  };
+  for (const d of ["kernel", "module_core", "tests"]) scan(join(repo, d));
+
+  if (testFiles.length === 0) {
+    finding("coverage-tests", "unavailable", "no test files found — operation coverage cannot be judged", null);
+  } else {
+    const untested = contracts.opContracts
+      .map((o) => o.operation)
+      .filter((op) => !testFiles.some((t) => t.includes(op)));
+    if (untested.length > 0) {
+      finding(
+        "coverage-tests",
+        "error",
+        `${untested.length} of ${contracts.opContracts.length} declared operations are named by no test`,
+        untested.join(" "),
+      );
+    }
+  }
+
+  // Every package with contracts should carry a shard, and it should name
+  // its owning seat — ADR-13 says the shard is owned, not merely present.
+  const moduleCore = join(repo, "module_core");
+  if (existsSync(moduleCore)) {
+    for (const mod of readdirSync(moduleCore)) {
+      const dir = join(moduleCore, mod);
+      const hasContracts = existsSync(join(dir, "contracts"));
+      if (!hasContracts) continue;
+
+      const shardPath = join(dir, "CLAUDE.md");
+      if (!existsSync(shardPath)) {
+        finding("coverage-docs", "error", `module_core/${mod} has contracts but no CLAUDE.md shard`, `module_core/${mod}`);
+        continue;
+      }
+      const shard = readFileSync(shardPath, "utf8");
+      const lines = shard.split("\n").length;
+      if (lines > 60) {
+        finding("coverage-docs", "error", `module_core/${mod}/CLAUDE.md is ${lines} lines — the cap is 60`, `module_core/${mod}`);
+      }
+      if (!/^\s*(?:Owner|Seat):/mi.test(shard)) {
+        finding("coverage-docs", "error", `module_core/${mod}/CLAUDE.md names no owning seat — a shard is owned, not merely present`, `module_core/${mod}`);
+      }
+    }
+  }
+}
+
 // ---- check 4: separation of duties -------------------------------------
 // The check DA-12's "audit-ready by construction" claim rests on, and the
 // one Rex flagged as unbacked. It reads real PR history; if gh is
@@ -227,6 +294,7 @@ const contracts = readContracts(repo);
 checkCoverage(repo, graph);
 checkConsistency(repo, contracts);
 checkCompleteness(repo, contracts);
+checkCoverage2(repo, contracts);
 const sodException = ratifiedSoDException(graph);
 if (slug) checkSoD(slug, limit, sodException);
 else finding("sod", "unavailable", "no git remote — cannot read PR history", null);
