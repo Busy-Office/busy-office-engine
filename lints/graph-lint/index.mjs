@@ -2,6 +2,7 @@
 // Chuck pass, automated: line cap + unique-ID check on a DESIGN-GRAPH.md file.
 // Generalized from busy-office-erp/scripts/graph-lint.mjs.
 import { readFileSync } from "node:fs";
+import { loadGraph, graphRows } from "../shared/graph-shards.mjs";
 
 const args = process.argv.slice(2);
 const pathArg = args.find((a) => !a.startsWith("--")) ?? "DESIGN-GRAPH.md";
@@ -22,10 +23,24 @@ const ROW_CAP = rowCapArg ? Number(rowCapArg.split("=")[1]) : 600;
 const totalCapArg = args.find((a) => a.startsWith("--total-cap="));
 const TOTAL_CAP = totalCapArg ? Number(totalCapArg.split("=")[1]) : 26000;
 
-const text = readFileSync(pathArg, "utf8");
+// The caps apply to the INDEX, not to the whole graph — that is the point
+// of sharding (ADR-48). A shard exists so the index can stay readable in one
+// pass; measuring index+shards together would make sharding pointless.
+// Row-cap and uniqueness apply everywhere, because a summary row and a
+// duplicate id are wrong wherever they sit.
+let failed = false;
+
+const graph = loadGraph(pathArg);
+const text = graph.index.text;
 const lines = text.split("\n");
 
-let failed = false;
+for (const rel of graph.missing) {
+  console.error(`FAIL shard: index declares a shard at ${rel}, which does not exist`);
+  failed = true;
+}
+if (graph.shards.length > 0) {
+  console.log(`OK shards: ${graph.shards.length} declared and present`);
+}
 
 if (lines.length > LINE_CAP) {
   console.error(`FAIL line-cap: ${pathArg} is ${lines.length} lines, cap is ${LINE_CAP}`);
@@ -47,29 +62,29 @@ const idPattern = /^\|\s*((?:PRN|ADR|DA|OQ|KRN)-[A-Za-z0-9]+)\s*\|/;
 // summary — which duplicates the node's own document, the thing
 // link-don't-duplicate exists to prevent.
 let overlong = 0;
-for (const [i, line] of lines.entries()) {
-  if (!idPattern.test(line) || line.length <= ROW_CAP) continue;
-  const id = line.match(idPattern)[1];
+for (const row of graphRows(graph)) {
+  if (row.line.length <= ROW_CAP) continue;
   console.error(
-    `FAIL row-cap: ${id} at line ${i + 1} is ${line.length} characters, cap is ${ROW_CAP} — state the decision here and leave the reasoning in its own document`,
+    `FAIL row-cap: ${row.id} at ${row.source}:${row.lineNumber} is ${row.line.length} characters, cap is ${ROW_CAP} — state the decision here and leave the reasoning in its own document`,
   );
   overlong++;
   failed = true;
 }
 if (overlong === 0) console.log(`OK row-cap: no row over ${ROW_CAP} characters`);
+// Across index and shards: a node defined twice is two answers to one
+// question, and sharding makes that easier to do by accident rather than
+// harder — the second definition is now in a different file.
 const seen = new Map();
-for (const [i, line] of lines.entries()) {
-  const m = line.match(idPattern);
-  if (!m) continue;
-  const id = m[1];
-  if (seen.has(id)) {
-    console.error(`FAIL duplicate-id: ${id} defined at line ${seen.get(id)} and line ${i + 1}`);
+for (const row of graphRows(graph)) {
+  const where = `${row.source}:${row.lineNumber}`;
+  if (seen.has(row.id)) {
+    console.error(`FAIL duplicate-id: ${row.id} defined at ${seen.get(row.id)} and ${where}`);
     failed = true;
   } else {
-    seen.set(id, i + 1);
+    seen.set(row.id, where);
   }
 }
-console.log(`OK unique-ids: ${seen.size} node definitions checked`);
+console.log(`OK unique-ids: ${seen.size} node definitions checked across ${graph.shards.length + 1} file(s)`);
 
 if (failed) {
   process.exit(1);
