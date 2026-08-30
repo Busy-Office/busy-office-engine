@@ -19,6 +19,29 @@ const findings = [];
 const finding = (check, severity, message, evidence) =>
   findings.push({ check, severity, message, evidence });
 
+/**
+ * What a check actually examined (ADR-60).
+ *
+ * Four times now a check has been the defect rather than the code, and
+ * every one was a SCOPE error: the shard check read module_core only
+ * (ADR-41), the graph cap counted lines while rows doubled (ADR-43), the
+ * citation check read five named files (ADR-56), and this tool never asked
+ * whether SESSIONS.md was current (ADR-59). Each sat adjacent to the thing
+ * it should have caught, facing slightly the wrong way.
+ *
+ * A fixture proves a check can fail (ADR-42). It cannot prove the check
+ * looks in the right places — ADR-41's mis-scoped version would have passed
+ * a fixture happily.
+ *
+ * So each check says what it looked at, and the reader compares that to
+ * what they know is there. "scanned 5 documents" beside a repo of sixty
+ * markdown files is visibly wrong in a way that reading the source is not.
+ * This does not verify scope; it makes scope legible, which is the cheapest
+ * thing that would have caught all four.
+ */
+const scopes = [];
+const scope = (check, examined) => scopes.push({ check, examined });
+
 /** Every ID the graph defines, by type. */
 function readGraph(repo) {
   const path = join(repo, "DESIGN-GRAPH.md");
@@ -80,7 +103,8 @@ function checkCoverage(repo, graph) {
   //
   // Same shape as the shard check ADR-41 fixed: a hardcoded scope that
   // reports green about the places it does not look.
-  for (const file of markdownAndSource(repo)) {
+  const files = markdownAndSource(repo);
+  for (const file of files) {
     const text = readFileSync(file, "utf8");
     const rel = file.replace(`${repo}/`, "");
 
@@ -123,6 +147,7 @@ function checkCoverage(repo, graph) {
       }
     }
   }
+  scope("coverage", `${files.length} file(s) — every .md/.mjs/.js outside node_modules, DESIGN-GRAPH.md excluded (it defines the ids)`);
   return checked;
 }
 
@@ -175,6 +200,7 @@ function checkSessionLog(repo, graph) {
     .map((m) => ({ id: m[0], type: m[1], n: Number(m[2]) }));
 
   const sessions = readFileSync(path, "utf8");
+  scope("session-log", `SESSIONS.md against the newest numbered ADR and DA in the graph — a session that decided nothing is NOT covered`);
   for (const type of ["ADR", "DA"]) {
     const ofType = numbered.filter((x) => x.type === type);
     if (ofType.length === 0) continue;
@@ -192,6 +218,7 @@ function checkSessionLog(repo, graph) {
 // misses it, because such an operation drives no transition.
 function checkConsistency(repo, contracts) {
   const declared = new Set(contracts.opContracts.map((o) => o.operation));
+  scope("consistency", `${declared.size} declared operation(s) against every source and doc under kernel/, module_core/, tests/`);
   if (declared.size === 0) return;
 
   const cited = new Map();
@@ -259,6 +286,7 @@ function checkCoverage2(repo, contracts) {
     }
   };
   for (const d of ["kernel", "module_core", "tests"]) scan(join(repo, d));
+  scope("coverage-tests", `${contracts.opContracts.length} operation(s) against ${testFiles.length} test file(s) — asks whether each is NAMED, never whether the test asserts anything`);
 
   if (testFiles.length === 0) {
     finding("coverage-tests", "unavailable", "no test files found — operation coverage cannot be judged", null);
@@ -288,6 +316,7 @@ function checkCoverage2(repo, contracts) {
   // So the gate is now "does this directory hold code or contracts",
   // which is the actual condition ADR-13 states, rather than a proxy that
   // happened to match module_core.
+  const shardsSeen = [];
   for (const root of ["kernel", "module_core", "module_extension", "projects"]) {
     const base = join(repo, root);
     if (!existsSync(base)) continue;
@@ -295,6 +324,7 @@ function checkCoverage2(repo, contracts) {
       const dir = join(base, pkg);
       if (!statSync(dir).isDirectory()) continue;
       if (!holdsWork(dir)) continue;
+      shardsSeen.push(`${root}/${pkg}`);
       checkShard(dir, `${root}/${pkg}`, finding);
     }
   }
@@ -303,7 +333,8 @@ function checkCoverage2(repo, contracts) {
   // undocumented: in a repo where modules are declarative, the end-to-end
   // tests are the only thing that assembles them.
   const tests = join(repo, "tests");
-  if (existsSync(tests) && holdsWork(tests)) checkShard(tests, "tests", finding);
+  if (existsSync(tests) && holdsWork(tests)) { checkShard(tests, "tests", finding); shardsSeen.push("tests"); }
+  scope("coverage-docs", `${shardsSeen.length} package(s) holding code or contracts across kernel/, module_core/, module_extension/, projects/, tests/`);
 }
 
 /** A directory holds work if it has code or contracts — not merely files. */
@@ -358,6 +389,8 @@ function checkSoD(slug, limit, exception) {
     finding("sod", "unavailable", `cannot read PR history for ${slug} — gh unavailable or repo inaccessible`, null);
     return;
   }
+
+  scope("sod", `the last ${limit} merged PR(s) of ${slug}, plus direct commits when there are none — reviews only, so an approval from the author's own second account would still read as reviewed`);
 
   // A repo with no PRs at all must not score clean. The first version of
   // this check only examined merged PRs, so a repo where everything was
@@ -454,6 +487,11 @@ if (accepted.length > 0) {
     if (f.evidence) console.log(`         evidence: ${f.evidence}`);
     if (sodException) console.log(`         accepted by ${sodException.node} — reopens on: ${sodException.reopen}`);
   }
+}
+
+if (scopes.length > 0) {
+  console.log("\nWhat each check examined (ADR-60 — scope is where checks have gone wrong, not logic):");
+  for (const sc of scopes) console.log(`  [${sc.check}] ${sc.examined}`);
 }
 
 if (unavailable.length > 0) {
