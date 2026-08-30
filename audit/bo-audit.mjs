@@ -59,22 +59,60 @@ function checkCoverage(repo, graph) {
   if (!graph) return finding("coverage", "unavailable", "no DESIGN-GRAPH.md found", null);
 
   const KNOWN_EXTERNAL = /^(ADR-0\d\d)$/; // three-digit IDs belong to sibling repos
-  const docs = ["ARCHITECTURE.md", "PROJECT-PLAN.md", "AGENTS.md", "SESSIONS.md", "README.md"];
   let checked = 0;
 
-  for (const doc of docs) {
-    const path = join(repo, doc);
-    if (!existsSync(path)) continue;
-    const text = readFileSync(path, "utf8");
-    for (const m of text.matchAll(/\b((?:PRN|ADR|DA|OQ|KRN)-[A-Za-z0-9-]*[A-Za-z0-9])\b/g)) {
+  // Every markdown file in the repo, not a hardcoded five (ADR-56).
+  //
+  // This check read exactly ARCHITECTURE.md, PROJECT-PLAN.md, AGENTS.md,
+  // SESSIONS.md and README.md — a list that was right when it was written
+  // and stopped covering where citations actually live. ADRs cite node ids
+  // constantly. So do package shards. So do source comments. None of them
+  // was checked, and a node cited five times and defined nowhere passed
+  // clean.
+  //
+  // Same shape as the shard check ADR-41 fixed: a hardcoded scope that
+  // reports green about the places it does not look.
+  for (const file of markdownAndSource(repo)) {
+    const text = readFileSync(file, "utf8");
+    const rel = file.replace(`${repo}/`, "");
+    // Node ids have two shapes and neither is "TYPE- anything". PRN, ADR,
+    // DA and KRN are numbered; OQ ids are uppercase words. The looser
+    // pattern this replaces matched filename slugs — `ADR-15-stack` came
+    // back as a citation of a node called `ADR-15-stack` — which would have
+    // buried the real finding under thirty false ones.
+    for (const m of text.matchAll(/\b((?:PRN|ADR|DA|KRN)-\d+|OQ-[A-Z][A-Z-]*[A-Z])\b/g)) {
       const id = m[1];
       checked += 1;
       if (!graph.ids.has(id) && !KNOWN_EXTERNAL.test(id)) {
-        finding("coverage", "error", `${doc} cites ${id}, which the graph does not define`, doc);
+        finding("coverage", "error", `${rel} cites ${id}, which the graph does not define`, rel);
       }
     }
   }
   return checked;
+}
+
+/**
+ * Where citations live: prose and code comments alike. A node id in a
+ * source comment is a citation with the same claim as one in a document —
+ * that the reader can go and look the node up.
+ */
+function markdownAndSource(repo) {
+  const out = [];
+  const skip = new Set(["node_modules", ".git", "must-fail"]);
+  const stack = [repo];
+  while (stack.length) {
+    const dir = stack.pop();
+    let items = [];
+    try { items = readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    for (const it of items) {
+      const p = join(dir, it.name);
+      if (it.isDirectory()) { if (!skip.has(it.name)) stack.push(p); continue; }
+      // The graph defines the ids; citing itself is not a citation.
+      if (p === join(repo, "DESIGN-GRAPH.md")) continue;
+      if (/\.(md|mjs|js)$/.test(it.name)) out.push(p);
+    }
+  }
+  return out;
 }
 
 // ---- check 2: consistency — operations cited but never declared ---------
