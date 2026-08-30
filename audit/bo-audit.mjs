@@ -10,7 +10,7 @@
 // Checks that need evidence this repo cannot reach are listed as
 // UNAVAILABLE with the reason, never silently skipped or assumed green.
 
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -167,29 +167,55 @@ function checkCoverage2(repo, contracts) {
     }
   }
 
-  // Every package with contracts should carry a shard, and it should name
-  // its owning seat — ADR-13 says the shard is owned, not merely present.
-  const moduleCore = join(repo, "module_core");
-  if (existsSync(moduleCore)) {
-    for (const mod of readdirSync(moduleCore)) {
-      const dir = join(moduleCore, mod);
-      const hasContracts = existsSync(join(dir, "contracts"));
-      if (!hasContracts) continue;
-
-      const shardPath = join(dir, "CLAUDE.md");
-      if (!existsSync(shardPath)) {
-        finding("coverage-docs", "error", `module_core/${mod} has contracts but no CLAUDE.md shard`, `module_core/${mod}`);
-        continue;
-      }
-      const shard = readFileSync(shardPath, "utf8");
-      const lines = shard.split("\n").length;
-      if (lines > 60) {
-        finding("coverage-docs", "error", `module_core/${mod}/CLAUDE.md is ${lines} lines — the cap is 60`, `module_core/${mod}`);
-      }
-      if (!/^\s*(?:Owner|Seat):/mi.test(shard)) {
-        finding("coverage-docs", "error", `module_core/${mod}/CLAUDE.md names no owning seat — a shard is owned, not merely present`, `module_core/${mod}`);
-      }
+  // Every package should carry a shard, and it should name its owning seat
+  // — ADR-13 says the shard is owned, not merely present.
+  //
+  // This check used to read `module_core/*` only, and only where a
+  // `contracts/` directory existed. Both halves were wrong in the same
+  // direction: kernel components ship no contracts, so eight of them went
+  // unshaded for thirty sessions and this check reported clean the whole
+  // time. It was found by a person asking, not by the audit.
+  //
+  // So the gate is now "does this directory hold code or contracts",
+  // which is the actual condition ADR-13 states, rather than a proxy that
+  // happened to match module_core.
+  for (const root of ["kernel", "module_core", "module_extension", "projects"]) {
+    const base = join(repo, root);
+    if (!existsSync(base)) continue;
+    for (const pkg of readdirSync(base)) {
+      const dir = join(base, pkg);
+      if (!statSync(dir).isDirectory()) continue;
+      if (!holdsWork(dir)) continue;
+      checkShard(dir, `${root}/${pkg}`, finding);
     }
+  }
+
+  // tests/ is a package by this rule too, and the sharpest one to leave
+  // undocumented: in a repo where modules are declarative, the end-to-end
+  // tests are the only thing that assembles them.
+  const tests = join(repo, "tests");
+  if (existsSync(tests) && holdsWork(tests)) checkShard(tests, "tests", finding);
+}
+
+/** A directory holds work if it has code or contracts — not merely files. */
+function holdsWork(dir) {
+  if (existsSync(join(dir, "contracts"))) return true;
+  return readdirSync(dir).some((f) => f.endsWith(".mjs") || f.endsWith(".js") || f.endsWith(".ts"));
+}
+
+function checkShard(dir, label, finding) {
+  const shardPath = join(dir, "CLAUDE.md");
+  if (!existsSync(shardPath)) {
+    finding("coverage-docs", "error", `${label} holds work but has no CLAUDE.md shard`, label);
+    return;
+  }
+  const shard = readFileSync(shardPath, "utf8");
+  const lines = shard.split("\n").length;
+  if (lines > 60) {
+    finding("coverage-docs", "error", `${label}/CLAUDE.md is ${lines} lines — the cap is 60`, label);
+  }
+  if (!/^\s*(?:Owner|Seat):/mi.test(shard)) {
+    finding("coverage-docs", "error", `${label}/CLAUDE.md names no owning seat — a shard is owned, not merely present`, label);
   }
 }
 
