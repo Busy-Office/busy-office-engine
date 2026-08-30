@@ -55,6 +55,14 @@ function readContracts(repo) {
 // Every TYPE-ID mentioned anywhere in the repo's markdown must be a node the
 // graph actually defines. A citation to a node that was renamed or removed
 // is a dangling reference, and the graph is meant to be the one truth.
+/**
+ * What a node id looks like, in one place. Two shapes and neither is
+ * "TYPE- anything": PRN, ADR, DA and KRN are numbered; OQ ids are
+ * uppercase words. Used for both citations and exemptions, so the two can
+ * never disagree about what an id is.
+ */
+const NODE_ID = /\b((?:PRN|ADR|DA|KRN)-\d+|OQ-[A-Z][A-Z-]*[A-Z])\b/g;
+
 function checkCoverage(repo, graph) {
   if (!graph) return finding("coverage", "unavailable", "no DESIGN-GRAPH.md found", null);
 
@@ -85,9 +93,15 @@ function checkCoverage(repo, graph) {
     //
     // Named ids only, never a blanket skip, so it stays greppable and so a
     // file cannot quietly excuse everything it says.
+    // The ids in an exemption are found with the SAME pattern that finds
+    // citations, not a second looser one. The first attempt used a
+    // character class including `-`, which swallowed an HTML comment's
+    // `-->` and produced an id called "OQ-LICENSE --" that matched nothing.
+    // Two patterns for one concept is the ADR-52 mistake, in miniature and
+    // within a single function.
     const exempt = new Set();
-    for (const e of text.matchAll(/graph-cite-exempt:\s*([A-Za-z0-9,\s-]+)/g)) {
-      for (const id of e[1].split(",").map((x) => x.trim()).filter(Boolean)) exempt.add(id);
+    for (const e of text.matchAll(/graph-cite-exempt:([^\n>]*)/g)) {
+      for (const m of e[1].matchAll(NODE_ID)) exempt.add(m[1]);
     }
     for (const id of exempt) {
       // An exemption for an id the graph DOES define is stale — the same
@@ -101,7 +115,7 @@ function checkCoverage(repo, graph) {
     // pattern this replaces matched filename slugs — `ADR-15-stack` came
     // back as a citation of a node called `ADR-15-stack` — which would have
     // buried the real finding under thirty false ones.
-    for (const m of text.matchAll(/\b((?:PRN|ADR|DA|KRN)-\d+|OQ-[A-Z][A-Z-]*[A-Z])\b/g)) {
+    for (const m of text.matchAll(NODE_ID)) {
       const id = m[1];
       checked += 1;
       if (!graph.ids.has(id) && !KNOWN_EXTERNAL.test(id) && !exempt.has(id)) {
