@@ -150,6 +150,42 @@ function markdownAndSource(repo) {
   return out;
 }
 
+// ---- check 1b: the session log is current -------------------------------
+// Fifteen sessions went unlogged in busy-office-erp before anyone noticed,
+// because every entry was written by anchoring on the previous entry's last
+// line — the first write silently no-opped and each one after it anchored
+// on text that was not there.
+//
+// Nothing caught it. This check reads the citations IN SESSIONS.md and
+// never asked whether SESSIONS.md was current, which is the ADR-41 shape
+// again: a check adjacent to the defect, looking the other way.
+//
+// The newest node in the graph is the cheapest thing to test against. A
+// session that decided nothing adds no node and is not caught here — that
+// limit is real and stated, but a session that ratified an ADR and did not
+// log it now cannot merge.
+function checkSessionLog(repo, graph) {
+  const path = join(repo, "SESSIONS.md");
+  if (!existsSync(path)) return finding("session-log", "unavailable", "no SESSIONS.md found", null);
+  if (!graph) return finding("session-log", "unavailable", "no graph to take the newest node from", null);
+
+  const numbered = [...graph.ids]
+    .map((id) => /^(PRN|ADR|DA)-(\d+)$/.exec(id))
+    .filter(Boolean)
+    .map((m) => ({ id: m[0], type: m[1], n: Number(m[2]) }));
+
+  const sessions = readFileSync(path, "utf8");
+  for (const type of ["ADR", "DA"]) {
+    const ofType = numbered.filter((x) => x.type === type);
+    if (ofType.length === 0) continue;
+    const newest = ofType.reduce((a, b) => (b.n > a.n ? b : a));
+    if (!new RegExp(`\\b${newest.id}\\b`).test(sessions)) {
+      finding("session-log", "error", `${newest.id} is the newest ${type} in the graph and SESSIONS.md does not mention it — the session that ratified it did not log itself`, "SESSIONS.md");
+    }
+  }
+  return true;
+}
+
 // ---- check 2: consistency — operations cited but never declared ---------
 // This is the gap ADR-29 found and named: an operation can appear in change
 // documents and tests while no op contract declares it. Trigger-coverage
@@ -391,6 +427,7 @@ const graph = readGraph(repo);
 const contracts = readContracts(repo);
 
 checkCoverage(repo, graph);
+checkSessionLog(repo, graph);
 checkConsistency(repo, contracts);
 checkCompleteness(repo, contracts);
 checkCoverage2(repo, contracts);
