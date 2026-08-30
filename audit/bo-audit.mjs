@@ -11,6 +11,7 @@
 // UNAVAILABLE with the reason, never silently skipped or assumed green.
 
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
+import { loadGraph, graphIds } from "../lints/shared/graph-shards.mjs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -22,13 +23,12 @@ const finding = (check, severity, message, evidence) =>
 function readGraph(repo) {
   const path = join(repo, "DESIGN-GRAPH.md");
   if (!existsSync(path)) return null;
-  const text = readFileSync(path, "utf8");
-  const ids = new Set();
-  for (const line of text.split("\n")) {
-    const m = line.match(/^\|\s*(?:~~)?([A-Z][A-Z0-9]*-[A-Za-z0-9-]+)(?:~~)?\s*\|/);
-    if (m) ids.add(m[1]);
-  }
-  return { text, ids };
+  // The graph may be sharded (ADR-48). Reading only the index would report
+  // every node in a shard as undefined — turning a correct citation into a
+  // finding, which is the worst kind of false positive: it trains readers to
+  // ignore the check.
+  const graph = loadGraph(path);
+  return { text: graph.index.text, ids: graphIds(graph), shards: graph.shards.length };
 }
 
 /** Every contract in module_core, by kind. */
