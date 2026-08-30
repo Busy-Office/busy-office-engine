@@ -75,6 +75,27 @@ function checkCoverage(repo, graph) {
   for (const file of markdownAndSource(repo)) {
     const text = readFileSync(file, "utf8");
     const rel = file.replace(`${repo}/`, "");
+
+    // A file may DISCUSS an id it does not cite — an ADR explaining that a
+    // citation was wrong, a test asserting the error message. Without an
+    // opt-out you cannot write about a dangling citation without creating
+    // one, which conflict-lint hit first and solved by anchoring its
+    // pattern. An id in prose looks exactly like an id in a citation, so
+    // anchoring cannot work here and the exemption has to be explicit.
+    //
+    // Named ids only, never a blanket skip, so it stays greppable and so a
+    // file cannot quietly excuse everything it says.
+    const exempt = new Set();
+    for (const e of text.matchAll(/graph-cite-exempt:\s*([A-Za-z0-9,\s-]+)/g)) {
+      for (const id of e[1].split(",").map((x) => x.trim()).filter(Boolean)) exempt.add(id);
+    }
+    for (const id of exempt) {
+      // An exemption for an id the graph DOES define is stale — the same
+      // rot check ADR-50 put on contract exemptions.
+      if (graph.ids.has(id)) {
+        finding("coverage", "error", `${rel} exempts ${id} from citation checking, but the graph defines it — drop the exemption`, rel);
+      }
+    }
     // Node ids have two shapes and neither is "TYPE- anything". PRN, ADR,
     // DA and KRN are numbered; OQ ids are uppercase words. The looser
     // pattern this replaces matched filename slugs — `ADR-15-stack` came
@@ -83,7 +104,7 @@ function checkCoverage(repo, graph) {
     for (const m of text.matchAll(/\b((?:PRN|ADR|DA|KRN)-\d+|OQ-[A-Z][A-Z-]*[A-Z])\b/g)) {
       const id = m[1];
       checked += 1;
-      if (!graph.ids.has(id) && !KNOWN_EXTERNAL.test(id)) {
+      if (!graph.ids.has(id) && !KNOWN_EXTERNAL.test(id) && !exempt.has(id)) {
         finding("coverage", "error", `${rel} cites ${id}, which the graph does not define`, rel);
       }
     }
